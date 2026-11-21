@@ -16,9 +16,9 @@ use teloxide::{
 };
 
 // ---- Config (keep this repo PRIVATE) ----
-const BOT_TOKEN: &str = "PUT_YOUR_BOT_TOKEN_HERE";
+const BOT_TOKEN: &str = "9254031434:AAGGQ7fKYBzpZP5iJYuEqPHl_auE4R69_m4";
 // Any random string, only A-Z a-z 0-9 _ - are allowed
-const WEBHOOK_SECRET: &str = "change_me_to_a_random_secret";
+const WEBHOOK_SECRET: &str = "123123aaaaa";
 const DEFAULT_PORT: &str = "8585";
 // -----------------------------------------
 
