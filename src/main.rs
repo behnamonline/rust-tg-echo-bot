@@ -18,7 +18,7 @@ use teloxide::{
 // ---- Config (keep this repo PRIVATE) ----
 const BOT_TOKEN: &str = "9254031434:AAGGQ7fKYBzpZP5iJYuEqPHl_auE4R69_m4";
 // Any random string, only A-Z a-z 0-9 _ - are allowed
-const WEBHOOK_SECRET: &str = "123123aaaaa";
+const WEBHOOK_SECRET: &str = "change_me_to_a_random_secret";
 const DEFAULT_PORT: &str = "8585";
 // -----------------------------------------
 
@@ -61,14 +61,19 @@ async fn index(State(state): State<AppState>, headers: HeaderMap) -> &'static st
         .get("x-forwarded-host")
         .or_else(|| headers.get("host"))
         .and_then(|v| v.to_str().ok());
-    if let Some(host) = host {
-        ensure_webhook(&state, host).await;
-    }
+    log::info!("GET / host={host:?}");
     if state.webhook_set.load(Ordering::SeqCst) {
-        "Bot is running, webhook is set."
-    } else {
-        "Webhook is NOT set, check the logs."
+        return "Bot is running, webhook is set.";
     }
+    if let Some(host) = host {
+        // Run in the background so the page always answers immediately
+        let state = state.clone();
+        let host = host.to_string();
+        tokio::spawn(async move {
+            ensure_webhook(&state, &host).await;
+        });
+    }
+    "Setting webhook... refresh this page in a few seconds."
 }
 
 async fn webhook(
@@ -101,29 +106,35 @@ async fn webhook(
 
 #[tokio::main]
 async fn main() {
-    pretty_env_logger::init();
+    // Show info logs on Railway even without RUST_LOG set
+    pretty_env_logger::formatted_builder()
+        .filter_level(log::LevelFilter::Info)
+        .init();
 
     let state = AppState {
         bot: Bot::new(BOT_TOKEN),
         webhook_set: Arc::new(AtomicBool::new(false)),
     };
 
-    // Bonus: if Railway already exposes the domain, set the webhook at startup
-    if let Ok(host) = env::var("RAILWAY_PUBLIC_DOMAIN") {
-        ensure_webhook(&state, &host).await;
-    }
-
     let app = Router::new()
         .route("/", get(index))
         .route("/webhook", post(webhook))
-        .with_state(state);
+        .with_state(state.clone());
 
     let port = env::var("PORT").unwrap_or_else(|_| DEFAULT_PORT.to_string());
     let addr = format!("0.0.0.0:{port}");
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .expect("Failed to bind port");
-    log::info!("Listening on {addr}");
+    println!("Listening on {addr}");
+
+    // Bonus: if Railway already exposes the domain, set the webhook at startup
+    // (in the background, so it never delays the server from accepting requests)
+    if let Ok(host) = env::var("RAILWAY_PUBLIC_DOMAIN") {
+        tokio::spawn(async move {
+            ensure_webhook(&state, &host).await;
+        });
+    }
 
     axum::serve(listener, app).await.expect("Server error");
 }
